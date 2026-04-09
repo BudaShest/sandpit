@@ -81,11 +81,8 @@ class FrameExtractor:
         return frame
 
 
-# Global frame extractor instance
-frame_extractor = FrameExtractor()
-
-
 async def frame_stream(reader: asyncio.StreamReader) -> AsyncGenerator[bytes, None]:
-    """Extract frames from stream using global extractor."""
-    async for frame in frame_extractor.frame_stream(reader):
+    """Извлечение кадров: отдельный буфер на соединение (общий singleton ломал бы несколько клиентов)."""
+    extractor = FrameExtractor()
+    async for frame in extractor.frame_stream(reader):
         yield frame

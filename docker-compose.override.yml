@@ -1,0 +1,13 @@
+# Локальная разработка: подмешивается к docker-compose.yml автоматически.
+# Код с хоста монтируется в контейнер — образ пересобирать не нужно при смене .py.
+# Для запуска без этого файла (как «чистый» образ): docker compose -f docker-compose.yml up
+#
+# После правок кода: docker compose restart navtelecom-server
+# Если менялись зависимости (requirements.txt): docker compose build --no-cache navtelecom-server
+
+version: '3.8'
+
+services:
+  navtelecom-server:
+    volumes:
+      - .:/app

@@ -1,25 +1,52 @@
 """Скрипт для настройки базы данных."""
 import asyncio
 import asyncpg
+import os
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
-# Добавляем src в путь
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+# Корень проекта (родитель каталога scripts), чтобы работал пакет src
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import config
+
+
+def _database_connect_params() -> Dict[str, Any]:
+    """
+    Параметры подключения: как в docker-compose (DATABASE_*), иначе config.yaml.
+
+    Внутри контейнера navtelecom-server хост БД — имя сервиса ``postgres``, не localhost.
+    """
+    if os.environ.get("DATABASE_HOST"):
+        return {
+            "host": os.environ["DATABASE_HOST"],
+            "port": int(os.environ.get("DATABASE_PORT", "5432")),
+            "user": os.environ.get("DATABASE_USER") or "navtelecom",
+            "password": os.environ.get("DATABASE_PASSWORD") or "password",
+            "database": os.environ.get("DATABASE_NAME") or "navtelecom_server",
+        }
+    db = config.database
+    return {
+        "host": db["host"],
+        "port": int(db["port"]),
+        "user": db["user"],
+        "password": db.get("password") or "password",
+        "database": db.get("name") or "navtelecom_server",
+    }
 
 
 async def setup_database():
     """Настройка базы данных."""
     try:
-        # Подключение к PostgreSQL
+        params = _database_connect_params()
+        # Целевая БД (в Docker уже создана через POSTGRES_DB)
         conn = await asyncpg.connect(
-            host=config.database['host'],
-            port=config.database['port'],
-            user=config.database['user'],
-            password=config.database['password'],
-            database='postgres'  # Подключаемся к системной БД
+            host=params["host"],
+            port=params["port"],
+            user=params["user"],
+            password=params["password"],
+            database=params["database"],
         )
         
         print("Подключение к PostgreSQL установлено")

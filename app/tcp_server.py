@@ -1,6 +1,7 @@
 """TCP server for receiving GPS/telemetry data."""
 import asyncio
 import socket
+import time
 import uvloop
 import structlog
 from datetime import datetime, timezone
@@ -181,7 +182,10 @@ async def process_can_frames(can_frames: list, device_id: str, raw_id: int):
 async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     """Handle client connection."""
     peer = writer.get_extra_info("peername")
-    ip, port = peer if peer else ("unknown", 0)
+    if peer:
+        ip, port = peer[0], peer[1]
+    else:
+        ip, port = "unknown", 0
     
     connection_id = f"{ip}:{port}"
     logger.info("connection_established", client=connection_id)
@@ -214,7 +218,6 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
                         ack_response = generate_ack_response(device_id, data_type)
                         writer.write(ack_response)
                         await writer.drain()
-                        record_ack_sent()
                         ack_sent = True
                         
                         # Record ACK latency

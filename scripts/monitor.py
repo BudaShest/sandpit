@@ -7,8 +7,8 @@ from datetime import datetime
 import sys
 from pathlib import Path
 
-# Добавляем src в путь
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+# Корень проекта, чтобы работал пакет src
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import config
 

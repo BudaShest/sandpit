@@ -29,8 +29,9 @@ services:
       - DATABASE_NAME=navtelecom_server
       - DATABASE_USER=navtelecom
       - DATABASE_PASSWORD=password
+      - DATABASE_URL=postgresql+asyncpg://navtelecom:password@postgres:5432/navtelecom_server
     ports:
-      - "5521:5521"  # TCP сервер
+      - "5221:5221"  # TCP сервер (как app.settings.tcp_port)
       - "8080:8080"  # REST API
     volumes:
       - ./logs:/app/logs
