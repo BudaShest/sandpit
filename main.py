@@ -36,14 +36,24 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
-# Настройка обычного логирования для совместимости
+# Обычное логирование: файл в logs/ (docker-compose: ./logs:/app/logs). Корень /app при bind-mount
+# часто без прав на запись — не используем server.log в корне.
+_handlers = [logging.StreamHandler()]
+_log_dir = Path(__file__).resolve().parent / "logs"
+_log_file = _log_dir / "server.log"
+try:
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    _handlers.insert(0, logging.FileHandler(_log_file, encoding="utf-8"))
+except OSError as e:
+    print(
+        f"Предупреждение: файл лога {_log_file} недоступен ({e}), только stderr",
+        file=sys.stderr,
+    )
+
 logging.basicConfig(
-    level=getattr(logging, 'INFO'),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('server.log'),
-        logging.StreamHandler()
-    ]
+    level=getattr(logging, "INFO"),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=_handlers,
 )
 
 
