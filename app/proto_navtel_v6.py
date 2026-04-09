@@ -9,6 +9,65 @@ class NavtelParseError(Exception):
     pass
 
 
+def _try_parse_ascii_navtel(data: bytes) -> Optional[Dict[str, Any]]:
+    """
+    Текстовые кадры (scripts/test_client.py): ~AIMEI,unix_ts,lat,lon,speed,course,sats,hdop~
+    и упрощённо ~T…~, ~E…~ — без бинарной длины/CRC.
+    """
+    if len(data) < 7 or data[0] != 0x7E or data[-1] != 0x7E:
+        return None
+    try:
+        inner = data[1:-1].decode("ascii")
+    except UnicodeDecodeError:
+        return None
+    if not inner:
+        return None
+    kind = inner[0]
+    if kind not in ("A", "T", "E"):
+        return None
+    if len(inner) < 2 or inner[1] not in "0123456789":
+        return None
+    if kind == "A":
+        parts = inner[1:].split(",")
+        if len(parts) < 8:
+            return None
+        imei, ts, lat_s, lon_s, speed_s, course_s, sats_s, _hdop = parts[:8]
+        try:
+            return {
+                "device_id": imei,
+                "device_time": datetime.fromtimestamp(int(ts), tz=timezone.utc),
+                "data_type": 0x01,
+                "lat": float(lat_s),
+                "lon": float(lon_s),
+                "speed": float(speed_s),
+                "course": float(course_s),
+                "satellites": int(float(sats_s)),
+                "ignition": None,
+            }
+        except (ValueError, OSError):
+            return None
+    if kind == "T":
+        parts = inner[1:].split(",")
+        if len(parts) < 2:
+            return None
+        return {
+            "device_id": parts[0],
+            "device_time": datetime.now(timezone.utc),
+            "data_type": 0x04,
+            "can_frames": [],
+        }
+    if kind == "E":
+        parts = inner[1:].split(",")
+        if len(parts) < 2:
+            return None
+        return {
+            "device_id": parts[0],
+            "device_time": datetime.now(timezone.utc),
+            "data_type": 0x03,
+        }
+    return None
+
+
 def calculate_crc16(data: bytes) -> int:
     """Calculate CRC16 for Navtelecom protocol."""
     crc = 0xFFFF
@@ -35,6 +94,10 @@ def try_parse_frame(data: bytes) -> Optional[Dict[str, Any]]:
     - CRC: 2 bytes (little endian)
     - End byte: 0x7E
     """
+    ascii_parsed = _try_parse_ascii_navtel(data)
+    if ascii_parsed is not None:
+        return ascii_parsed
+
     if len(data) < 6:  # Minimum frame size
         return None
     

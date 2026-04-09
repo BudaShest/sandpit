@@ -101,6 +101,11 @@ class MetricsCollector:
 metrics = MetricsCollector()
 
 
+def get_metrics() -> Dict[str, Any]:
+    """Снимок метрик для алертов, API и тестов (обёртка над MetricsCollector.get_metrics)."""
+    return metrics.get_metrics()
+
+
 # Convenience functions
 def increment_counter(name: str, value: int = 1, labels: Dict[str, str] = None):
     """Increment a counter metric."""

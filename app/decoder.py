@@ -77,10 +77,14 @@ class DecoderService:
     
     def __init__(self):
         self.running = False
-        self.queue = asyncio.Queue()
+        # Queue must be created inside the running loop (e.g. start()), not at import:
+        # otherwise asyncio.run() / nested tasks use a different loop than get_event_loop()
+        # at import time (Python 3.9), causing "Future attached to a different loop".
+        self.queue: Optional[asyncio.Queue] = None
     
     async def start(self):
         """Start decoder service."""
+        self.queue = asyncio.Queue()
         self.running = True
         asyncio.create_task(self._process_queue())
     
@@ -90,6 +94,8 @@ class DecoderService:
     
     async def add_frame(self, raw_id: int, payload: bytes):
         """Add frame to decode queue."""
+        if self.queue is None:
+            raise RuntimeError("DecoderService.start() must be called before add_frame")
         await self.queue.put((raw_id, payload))
     
     async def _process_queue(self):

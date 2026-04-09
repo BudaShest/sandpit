@@ -1,5 +1,6 @@
 """Тестовый клиент для проверки сервера."""
 import asyncio
+import os
 import socket
 import time
 import random
@@ -8,10 +9,10 @@ import random
 class TestClient:
     """Тестовый клиент для отправки данных Navtelecom."""
     
-    def __init__(self, host='localhost', port=5221):
-        """Инициализация клиента."""
-        self.host = host
-        self.port = port
+    def __init__(self, host=None, port=None):
+        """Инициализация клиента. TCP_HOST / TCP_PORT из окружения (Docker: 127.0.0.1)."""
+        self.host = host or os.environ.get("TCP_HOST", "127.0.0.1")
+        self.port = int(port or os.environ.get("TCP_PORT", "5221"))
         self.socket = None
     
     async def connect(self):
@@ -27,10 +28,28 @@ class TestClient:
             print("Отключен от сервера")
     
     def send_frame(self, frame: str):
-        """Отправка кадра."""
+        """Отправка кадра и сброс входящих данных (ACK/NACK), иначе окно TCP может забиться."""
         if self.socket:
-            self.socket.send(frame.encode('utf-8'))
+            self.socket.sendall(frame.encode("utf-8"))
             print(f"Отправлен кадр: {frame}")
+            self._drain_readable()
+
+    def _drain_readable(self):
+        if not self.socket:
+            return
+        self.socket.setblocking(False)
+        try:
+            while True:
+                try:
+                    chunk = self.socket.recv(65536)
+                    if not chunk:
+                        raise ConnectionError(
+                            "Сервер закрыл соединение (FIN); следующая отправка дала бы broken pipe"
+                        )
+                except BlockingIOError:
+                    break
+        finally:
+            self.socket.setblocking(True)
     
     def generate_gps_frame(self, imei: str, lat: float, lon: float, speed: float = 0.0) -> str:
         """Генерация GPS кадра."""

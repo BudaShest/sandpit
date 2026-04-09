@@ -103,16 +103,15 @@ async def get_canary_flag(request: Request) -> bool:
     return feature_flags.should_use_canary("api_v2", trace_id)
 
 
-async def get_api_version(request: Request) -> str:
-    """Get API version from request path."""
+def get_api_version(request: Request) -> str:
+    """Get API version from request path (sync: no I/O; safe to call from middleware)."""
     path = request.url.path
-    
+
     if path.startswith("/api/v2/"):
         return "v2"
-    elif path.startswith("/api/v1/"):
+    if path.startswith("/api/v1/"):
         return "v1"
-    else:
-        return "v1"  # Default to v1
+    return "v1"
 
 
 async def check_rate_limit(tenant: Dict[str, Any], request: Request) -> None:

@@ -10,6 +10,7 @@ import uuid
 
 from app.api.v1.routers import devices as v1_devices
 from app.api.v2.routers import devices as v2_devices
+from app.api import legacy_compat
 from app.api.middleware.idempotency import idempotency_middleware
 from app.api.deps import get_trace_id, get_canary_flag, get_api_version
 
@@ -79,6 +80,7 @@ async def add_deprecation_headers(request: Request, call_next):
 
 
 # Include routers
+app.include_router(legacy_compat.router)
 app.include_router(v1_devices.router, prefix="/api/v1")
 app.include_router(v2_devices.router, prefix="/api/v2")
 

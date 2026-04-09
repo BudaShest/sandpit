@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     tcp_host: str = "0.0.0.0"
     tcp_port: int = 5221
     
-    # Database settings
-    database_url: str = "postgresql+asyncpg://postgres:postgres@db:5432/postgres"
+    # Database settings (в Docker задайте DATABASE_URL, см. docker-compose.yml)
+    database_url: str = "postgresql+asyncpg://navtelecom:password@localhost:5432/navtelecom_server"
     
     # API settings
     api_host: str = "0.0.0.0"
