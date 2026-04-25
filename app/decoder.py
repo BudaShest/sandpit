@@ -1,8 +1,11 @@
 """Frame decoder service."""
 import asyncio
 from typing import Optional
+import structlog
 from app.proto_navtel_v6 import try_parse_frame, NavtelParseError
 from app.models import save_telemetry, save_decode_error
+
+logger = structlog.get_logger()
 
 
 async def decode_and_store(raw_id: int, payload: bytes) -> bool:
@@ -17,8 +20,26 @@ async def decode_and_store(raw_id: int, payload: bytes) -> bool:
         True if frame was successfully decoded, False otherwise
     """
     try:
+        payload_hex = payload.hex()
+        payload_hex_preview = payload_hex[:160] + ("..." if len(payload_hex) > 160 else "")
+        payload_ascii_preview = "".join(chr(b) if 32 <= b <= 126 else "." for b in payload[:64])
+
+        logger.info(
+            "decoder_parse_start",
+            raw_id=raw_id,
+            payload_len=len(payload),
+            payload_hex_preview=payload_hex_preview,
+            payload_ascii_preview=payload_ascii_preview,
+        )
+
         # Try to parse frame
         parsed_data = try_parse_frame(payload)
+        logger.info(
+            "decoder_parse_result",
+            raw_id=raw_id,
+            parse_success=parsed_data is not None,
+            parsed_keys=sorted(parsed_data.keys()) if isinstance(parsed_data, dict) else None,
+        )
         
         if parsed_data is None:
             # Incomplete frame, not an error
