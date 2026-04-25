@@ -19,7 +19,7 @@ def _try_parse_flex_emulator_binary(data: bytes) -> Optional[Dict[str, Any]]:
     - ... payload ...
     - 0x7E
     """
-    if len(data) < 40 or data[0] != 0x7E or data[-1] != 0x7E:
+    if len(data) < 40 or data[0] != 0x7E:
         return None
     if data[1] not in (0x54, ord("T"), ord("A")):
         return None
@@ -416,7 +416,7 @@ def summarize_binary_frame(data: bytes) -> Optional[Dict[str, Any]]:
     """
     if not data:
         return None
-    if data[0] != 0x7E or data[-1] != 0x7E:
+    if data[0] != 0x7E:
         return None
 
     def _hex_preview(buf: bytes, limit: int = 120) -> str:
@@ -431,6 +431,7 @@ def summarize_binary_frame(data: bytes) -> Optional[Dict[str, Any]]:
             return rendered
         return f"{rendered[:limit]}..."
 
+    has_trailing_7e = data[-1] == 0x7E
     declared_length = None
     expected_total_bytes = None
     length_matches = None
@@ -495,6 +496,7 @@ def summarize_binary_frame(data: bytes) -> Optional[Dict[str, Any]]:
 
     summary = {
         "frame_kind": "binary_7e",
+        "has_trailing_7e": has_trailing_7e,
         "total_bytes": len(data),
         "declared_length": declared_length,
         "expected_total_bytes": expected_total_bytes,

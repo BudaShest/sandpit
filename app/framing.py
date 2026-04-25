@@ -11,6 +11,20 @@ class FrameExtractor:
     def __init__(self, max_frame_size: int = None):
         self.max_frame_size = max_frame_size or settings.frame_max_size
         self.buffer = bytearray()
+
+    @staticmethod
+    def _looks_like_flex_emulator_tail(buf: bytearray) -> bool:
+        """
+        Heuristic for emulator packets that may not include trailing 0x7E.
+        Observed shape: starts with 0x7E 0x54 ... and ends with CRC byte often 0x7F.
+        """
+        if len(buf) < 40:
+            return False
+        if buf[0] != 0x7E:
+            return False
+        if buf[1] not in (0x54, ord("T"), ord("A")):
+            return False
+        return buf[-1] in (0x7F, 0x7E)
     
     async def frame_stream(self, reader: asyncio.StreamReader) -> AsyncGenerator[bytes, None]:
         """Extract frames from stream."""
@@ -67,6 +81,11 @@ class FrameExtractor:
         
         if end_idx == -1:
             # No end marker found
+            if self._looks_like_flex_emulator_tail(self.buffer):
+                # FLEX emulator packet can be complete without explicit trailing 0x7E.
+                frame = bytes(self.buffer)
+                self.buffer.clear()
+                return frame
             if len(self.buffer) >= self.max_frame_size:
                 # Frame too large, return what we have
                 frame = bytes(self.buffer[:self.max_frame_size])
