@@ -196,6 +196,13 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
     connection_id = f"{ip}:{port}"
     logger.info("connection_established", client=connection_id)
     record_connection_event("connected", ip)
+    # Some NTC devices expect immediate plain-text greeting acknowledgement.
+    try:
+        writer.write(b"OK\n")
+        await writer.drain()
+        logger.debug("connection_greeting_sent", client=connection_id, ack_kind="ok_lf")
+    except Exception as e:
+        logger.debug("connection_greeting_failed", client=connection_id, error=str(e))
     
     try:
         # Configure socket for low latency
@@ -223,7 +230,7 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
                         
                         # Some NTC devices send greeting/login packet and expect plain "OK".
                         if protocol_hint in {"ntc_greeting", "ntc_text_payload"}:
-                            writer.write(b"OK\r\n")
+                            writer.write(b"OK\n")
                             ack_kind = "ok"
                         else:
                             ack_response = generate_ack_response(device_id, data_type)
