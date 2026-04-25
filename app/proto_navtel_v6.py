@@ -10,6 +10,44 @@ class NavtelParseError(Exception):
     pass
 
 
+def _extract_ntc_coordinates(text: str) -> Dict[str, Any]:
+    """Best-effort extraction of coordinates/speed from NTC text payload."""
+    result: Dict[str, Any] = {}
+    number_matches = list(re.finditer(r"[-+]?\d+(?:\.\d+)?", text))
+    values = []
+    for m in number_matches:
+        token = m.group(0)
+        if "." not in token:
+            continue
+        try:
+            values.append(float(token))
+        except ValueError:
+            continue
+
+    # Look for first plausible lat/lon pair in decimal degrees.
+    for i in range(len(values) - 1):
+        a = values[i]
+        b = values[i + 1]
+        if -90 <= a <= 90 and -180 <= b <= 180:
+            result["lat"] = a
+            result["lon"] = b
+            if i + 2 < len(values) and 0 <= values[i + 2] <= 400:
+                result["speed"] = values[i + 2]
+            break
+
+    # Optional: timestamp if Unix epoch appears in text.
+    ts_match = re.search(r"\b(1[6-9]\d{8}|2\d{9})\b", text)
+    if ts_match:
+        try:
+            ts = int(ts_match.group(1))
+            if 946684800 <= ts <= 4102444800:
+                result["device_time"] = datetime.fromtimestamp(ts, tz=timezone.utc)
+        except ValueError:
+            pass
+
+    return result
+
+
 def _try_parse_ntc_greeting(data: bytes) -> Optional[Dict[str, Any]]:
     """Parse NTC greeting/login packet (e.g. '@NTC...S:869132076048835')."""
     if not data:
@@ -25,13 +63,17 @@ def _try_parse_ntc_greeting(data: bytes) -> Optional[Dict[str, Any]]:
     imei_match = re.search(r"S:(\d{15})", text)
     device_id = imei_match.group(1) if imei_match else "unknown_ntc_device"
 
-    return {
+    parsed = {
         "device_id": device_id,
         "device_time": datetime.now(timezone.utc),
         "data_type": 0x00,
         "protocol_hint": "ntc_greeting",
         "ntc_raw_text": text,
     }
+    parsed.update(_extract_ntc_coordinates(text))
+    if "lat" in parsed and "lon" in parsed:
+        parsed["protocol_hint"] = "ntc_text_payload"
+    return parsed
 
 
 def _try_parse_flex_emulator_binary(data: bytes) -> Optional[Dict[str, Any]]:

@@ -222,7 +222,7 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
                         protocol_hint = parsed_data.get("protocol_hint")
                         
                         # Some NTC devices send greeting/login packet and expect plain "OK".
-                        if protocol_hint == "ntc_greeting":
+                        if protocol_hint in {"ntc_greeting", "ntc_text_payload"}:
                             writer.write(b"OK\r\n")
                             ack_kind = "ok"
                         else:
