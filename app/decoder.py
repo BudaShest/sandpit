@@ -34,11 +34,24 @@ async def decode_and_store(raw_id: int, payload: bytes) -> bool:
 
         # Try to parse frame
         parsed_data = try_parse_frame(payload)
+        parsed_preview = None
+        if isinstance(parsed_data, dict):
+            parsed_preview = {
+                "device_id": parsed_data.get("device_id"),
+                "device_time": parsed_data.get("device_time").isoformat() if parsed_data.get("device_time") else None,
+                "lat": parsed_data.get("lat"),
+                "lon": parsed_data.get("lon"),
+                "speed": parsed_data.get("speed"),
+                "course": parsed_data.get("course"),
+                "altitude": parsed_data.get("altitude"),
+                "protocol_hint": parsed_data.get("protocol_hint"),
+            }
         logger.info(
             "decoder_parse_result",
             raw_id=raw_id,
             parse_success=parsed_data is not None,
             parsed_keys=sorted(parsed_data.keys()) if isinstance(parsed_data, dict) else None,
+            parsed_preview=parsed_preview,
         )
         
         if parsed_data is None:

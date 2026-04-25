@@ -9,6 +9,59 @@ class NavtelParseError(Exception):
     pass
 
 
+def _try_parse_flex_emulator_binary(data: bytes) -> Optional[Dict[str, Any]]:
+    """
+    Heuristic parser for FLEX emulator binary packets observed in logs.
+
+    Packet shape (observed):
+    - 0x7E
+    - frame marker/type byte (often 0x54 == 'T')
+    - ... payload ...
+    - 0x7E
+    """
+    if len(data) < 40 or data[0] != 0x7E or data[-1] != 0x7E:
+        return None
+    if data[1] not in (0x54, ord("T"), ord("A")):
+        return None
+
+    try:
+        primary_ts = struct.unpack("<I", data[12:16])[0]
+        secondary_ts = struct.unpack("<I", data[20:24])[0]
+        lat_raw = struct.unpack("<i", data[24:28])[0]
+        lon_raw = struct.unpack("<i", data[28:32])[0]
+        altitude_raw = struct.unpack("<I", data[32:36])[0]
+        speed_raw = struct.unpack("<f", data[36:40])[0]
+    except struct.error:
+        return None
+
+    # Guardrails to avoid false-positive parsing for arbitrary binary data.
+    if not (946684800 <= primary_ts <= 4102444800):
+        return None
+    if not (primary_ts - 300 <= secondary_ts <= primary_ts + 300):
+        return None
+    if not (0.0 <= speed_raw <= 400.0):
+        return None
+
+    # For observed emulator packets coordinates are scaled by 600000.
+    lat = lat_raw / 600000.0
+    lon = lon_raw / 600000.0
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+
+    return {
+        "device_id": "flex_emulator",
+        "device_time": datetime.fromtimestamp(primary_ts, tz=timezone.utc),
+        "data_type": 0x01,  # treat as GPS-like frame
+        "lat": lat,
+        "lon": lon,
+        "speed": float(speed_raw),
+        "course": float(struct.unpack("<H", data[18:20])[0]),
+        "altitude": altitude_raw / 10.0,
+        "protocol_hint": "flex_emulator_binary",
+        "raw_data": data.hex(),
+    }
+
+
 def _try_parse_ascii_navtel(data: bytes) -> Optional[Dict[str, Any]]:
     """
     Текстовые кадры (scripts/test_client.py): ~AIMEI,unix_ts,lat,lon,speed,course,sats,hdop~
@@ -97,6 +150,10 @@ def try_parse_frame(data: bytes) -> Optional[Dict[str, Any]]:
     ascii_parsed = _try_parse_ascii_navtel(data)
     if ascii_parsed is not None:
         return ascii_parsed
+
+    emulator_parsed = _try_parse_flex_emulator_binary(data)
+    if emulator_parsed is not None:
+        return emulator_parsed
 
     if len(data) < 6:  # Minimum frame size
         return None
@@ -424,7 +481,7 @@ def summarize_binary_frame(data: bytes) -> Optional[Dict[str, Any]]:
         quick_decode["lon_raw"] = lon_raw
 
         coord_candidates: List[Dict[str, Any]] = []
-        for divisor in (1_000_000, 10_000_000):
+        for divisor in (600_000, 1_000_000, 10_000_000):
             lat = lat_raw / divisor
             lon = lon_raw / divisor
             if -90 <= lat <= 90 and -180 <= lon <= 180:
