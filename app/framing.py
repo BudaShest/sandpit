@@ -49,7 +49,12 @@ class FrameExtractor:
                     yield frame
                     
             except asyncio.TimeoutError:
-                # Timeout is normal, continue reading
+                # If some bytes were received but no frame delimiter appeared yet,
+                # flush buffer as a raw frame for diagnostics/fallback parsing.
+                if self.buffer:
+                    frame = bytes(self.buffer)
+                    self.buffer.clear()
+                    yield frame
                 continue
             except Exception as e:
                 print(f"Frame extraction error: {e}")
@@ -63,8 +68,9 @@ class FrameExtractor:
         # Try to find frame start marker (0x7E for Navtelecom)
         start_idx = self.buffer.find(0x7E)
         if start_idx == -1:
-            # No start marker found, clear buffer
-            self.buffer.clear()
+            # No marker yet: keep accumulating, but cap buffer growth.
+            if len(self.buffer) > self.max_frame_size:
+                self.buffer = self.buffer[-self.max_frame_size:]
             return None
         
         # Remove data before start marker

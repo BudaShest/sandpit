@@ -158,9 +158,10 @@ def try_parse_frame(data: bytes) -> Optional[Dict[str, Any]]:
     if len(data) < 6:  # Minimum frame size
         return None
     
-    # Check start and end markers
+    # For non-0x7E protocols just return None (no hard protocol error).
+    # This allows upstream code to persist raw payloads and inspect them.
     if data[0] != 0x7E or data[-1] != 0x7E:
-        raise NavtelParseError("Invalid frame markers")
+        return None
     
     # Extract length
     try:

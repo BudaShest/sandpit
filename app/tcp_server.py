@@ -252,6 +252,15 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
                                 client=connection_id,
                                 **binary_preview
                             )
+                        else:
+                            frame_hex = frame.hex()
+                            logger.info(
+                                "unknown_frame_preview",
+                                client=connection_id,
+                                frame_len=len(frame),
+                                frame_hex_preview=frame_hex[:160] + ("..." if len(frame_hex) > 160 else ""),
+                                frame_ascii_preview="".join(chr(b) if 32 <= b <= 126 else "." for b in frame[:64]),
+                            )
                 except NavtelParseError as e:
                     binary_preview = summarize_binary_frame(frame)
                     if binary_preview:
