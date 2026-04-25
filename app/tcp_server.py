@@ -219,10 +219,16 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
                     if parsed_data:
                         device_id = parsed_data.get("device_id", "unknown")
                         data_type = parsed_data.get("data_type", 0)
+                        protocol_hint = parsed_data.get("protocol_hint")
                         
-                        # Send fast ACK
-                        ack_response = generate_ack_response(device_id, data_type)
-                        writer.write(ack_response)
+                        # Some NTC devices send greeting/login packet and expect plain "OK".
+                        if protocol_hint == "ntc_greeting":
+                            writer.write(b"OK\r\n")
+                            ack_kind = "ok"
+                        else:
+                            ack_response = generate_ack_response(device_id, data_type)
+                            writer.write(ack_response)
+                            ack_kind = "ack"
                         await writer.drain()
                         ack_sent = True
                         
@@ -234,13 +240,15 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
                         
                         # Record metrics
                         record_frame_received(device_id, len(frame), data_type)
-                        record_ack_sent(device_id, "ack")
+                        record_ack_sent(device_id, ack_kind)
                         
                         logger.debug(
                             "fast_ack_sent",
                             client=connection_id,
                             device_id=device_id,
-                            data_type=data_type
+                            data_type=data_type,
+                            ack_kind=ack_kind,
+                            protocol_hint=protocol_hint
                         )
                     else:
                         # Parsing did not fail, but frame could not be decoded.

@@ -1,4 +1,5 @@
 """Navtelecom v6.x protocol parser."""
+import re
 import struct
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -7,6 +8,30 @@ from datetime import datetime, timezone
 class NavtelParseError(Exception):
     """Navtelecom protocol parsing error."""
     pass
+
+
+def _try_parse_ntc_greeting(data: bytes) -> Optional[Dict[str, Any]]:
+    """Parse NTC greeting/login packet (e.g. '@NTC...S:869132076048835')."""
+    if not data:
+        return None
+    try:
+        text = data.decode("ascii", errors="ignore")
+    except Exception:
+        return None
+
+    if "@NTC" not in text:
+        return None
+
+    imei_match = re.search(r"S:(\d{15})", text)
+    device_id = imei_match.group(1) if imei_match else "unknown_ntc_device"
+
+    return {
+        "device_id": device_id,
+        "device_time": datetime.now(timezone.utc),
+        "data_type": 0x00,
+        "protocol_hint": "ntc_greeting",
+        "ntc_raw_text": text,
+    }
 
 
 def _try_parse_flex_emulator_binary(data: bytes) -> Optional[Dict[str, Any]]:
@@ -147,6 +172,10 @@ def try_parse_frame(data: bytes) -> Optional[Dict[str, Any]]:
     - CRC: 2 bytes (little endian)
     - End byte: 0x7E
     """
+    ntc_greeting = _try_parse_ntc_greeting(data)
+    if ntc_greeting is not None:
+        return ntc_greeting
+
     ascii_parsed = _try_parse_ascii_navtel(data)
     if ascii_parsed is not None:
         return ascii_parsed
