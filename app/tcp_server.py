@@ -9,7 +9,13 @@ from app.settings import settings
 from app.framing import frame_stream
 from app.models import save_raw_frame, save_can_raw_frame, save_can_signal
 from app.decoder import decoder_service
-from app.proto_navtel_v6 import try_parse_frame, generate_ack_response, generate_nack_response, NavtelParseError
+from app.proto_navtel_v6 import (
+    try_parse_frame,
+    generate_ack_response,
+    generate_nack_response,
+    summarize_binary_frame,
+    NavtelParseError,
+)
 from app.can_parser import can_parser
 from app.tp_assembly import tp_assembler
 from app.backpressure import backpressure_manager, rate_limiter
@@ -236,7 +242,25 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
                             device_id=device_id,
                             data_type=data_type
                         )
+                    else:
+                        # Parsing did not fail, but frame could not be decoded.
+                        # Emit readable preview for binary packets from emulator/devices.
+                        binary_preview = summarize_binary_frame(frame)
+                        if binary_preview:
+                            logger.info(
+                                "binary_frame_preview",
+                                client=connection_id,
+                                **binary_preview
+                            )
                 except NavtelParseError as e:
+                    binary_preview = summarize_binary_frame(frame)
+                    if binary_preview:
+                        logger.warning(
+                            "binary_frame_parse_error_preview",
+                            client=connection_id,
+                            error=str(e),
+                            **binary_preview
+                        )
                     # Send NACK for protocol errors
                     if device_id:
                         nack_response = generate_nack_response(device_id, 0x02)  # Format error

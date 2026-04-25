@@ -1,6 +1,6 @@
 """Navtelecom v6.x protocol parser."""
 import struct
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
 
@@ -349,3 +349,59 @@ def generate_nack_response(device_id: str, error_code: int) -> bytes:
     response.append(0x7E)  # End marker
     
     return bytes(response)
+
+
+def summarize_binary_frame(data: bytes) -> Optional[Dict[str, Any]]:
+    """
+    Build human-readable preview for opaque binary frames.
+
+    Used only for logging/diagnostics when full protocol parsing fails.
+    """
+    if not data:
+        return None
+    if data[0] != 0x7E or data[-1] != 0x7E:
+        return None
+
+    def _hex_preview(buf: bytes, limit: int = 120) -> str:
+        value = buf.hex()
+        if len(value) <= limit:
+            return value
+        return f"{value[:limit]}..."
+
+    def _ascii_preview(buf: bytes, limit: int = 64) -> str:
+        rendered = "".join(chr(b) if 32 <= b <= 126 else "." for b in buf)
+        if len(rendered) <= limit:
+            return rendered
+        return f"{rendered[:limit]}..."
+
+    declared_length = None
+    expected_total_bytes = None
+    length_matches = None
+    if len(data) >= 3:
+        declared_length = struct.unpack("<H", data[1:3])[0]
+        expected_total_bytes = declared_length + 6  # 0x7E + len(2) + payload + crc(2) + 0x7E
+        length_matches = len(data) == expected_total_bytes
+
+    # Heuristic: collect likely Unix timestamps from little-endian uint32 windows.
+    timestamp_candidates: List[Dict[str, Any]] = []
+    for offset in range(0, len(data) - 3):
+        value = struct.unpack("<I", data[offset:offset + 4])[0]
+        if 946684800 <= value <= 4102444800:  # 2000-01-01 .. 2100-01-01
+            timestamp_candidates.append({
+                "offset": offset,
+                "unix": value,
+                "utc": datetime.fromtimestamp(value, tz=timezone.utc).isoformat(),
+            })
+            if len(timestamp_candidates) >= 5:
+                break
+
+    return {
+        "frame_kind": "binary_7e",
+        "total_bytes": len(data),
+        "declared_length": declared_length,
+        "expected_total_bytes": expected_total_bytes,
+        "length_matches": length_matches,
+        "frame_hex_preview": _hex_preview(data),
+        "ascii_preview": _ascii_preview(data),
+        "timestamp_candidates": timestamp_candidates,
+    }
