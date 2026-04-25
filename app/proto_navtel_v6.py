@@ -395,7 +395,48 @@ def summarize_binary_frame(data: bytes) -> Optional[Dict[str, Any]]:
             if len(timestamp_candidates) >= 5:
                 break
 
-    return {
+    quick_decode: Dict[str, Any] = {}
+    if len(data) >= 2:
+        frame_type_byte = data[1]
+        quick_decode["frame_type_byte"] = frame_type_byte
+        if 32 <= frame_type_byte <= 126:
+            quick_decode["frame_type_char"] = chr(frame_type_byte)
+
+    # Heuristic decode for frames that look like emulator packets:
+    # ~ [type] [..] [unix ts] [speed] [unix ts] [lat] [lon] [..] [crc] ~
+    if len(data) >= 34:
+        primary_ts = struct.unpack("<I", data[12:16])[0]
+        secondary_ts = struct.unpack("<I", data[20:24])[0]
+        speed_raw = struct.unpack("<H", data[18:20])[0]
+        lat_raw = struct.unpack("<i", data[24:28])[0]
+        lon_raw = struct.unpack("<i", data[28:32])[0]
+
+        quick_decode["primary_timestamp_unix"] = primary_ts
+        quick_decode["primary_timestamp_utc"] = datetime.fromtimestamp(
+            primary_ts, tz=timezone.utc
+        ).isoformat()
+        quick_decode["secondary_timestamp_unix"] = secondary_ts
+        quick_decode["secondary_timestamp_utc"] = datetime.fromtimestamp(
+            secondary_ts, tz=timezone.utc
+        ).isoformat()
+        quick_decode["speed_raw"] = speed_raw
+        quick_decode["lat_raw"] = lat_raw
+        quick_decode["lon_raw"] = lon_raw
+
+        coord_candidates: List[Dict[str, Any]] = []
+        for divisor in (1_000_000, 10_000_000):
+            lat = lat_raw / divisor
+            lon = lon_raw / divisor
+            if -90 <= lat <= 90 and -180 <= lon <= 180:
+                coord_candidates.append({
+                    "scale_divisor": divisor,
+                    "lat": round(lat, 7),
+                    "lon": round(lon, 7),
+                })
+        if coord_candidates:
+            quick_decode["coordinate_candidates"] = coord_candidates
+
+    summary = {
         "frame_kind": "binary_7e",
         "total_bytes": len(data),
         "declared_length": declared_length,
@@ -405,3 +446,6 @@ def summarize_binary_frame(data: bytes) -> Optional[Dict[str, Any]]:
         "ascii_preview": _ascii_preview(data),
         "timestamp_candidates": timestamp_candidates,
     }
+    if quick_decode:
+        summary["quick_decode"] = quick_decode
+    return summary
